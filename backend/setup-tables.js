@@ -26,6 +26,10 @@ const createTables = async () => {
         tags TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP
+        og_image TEXT,
+        favicon TEXT,
+        site_name VARCHAR(255),
+        metadata_fetched_at TIMESTAMP,
       );
     `);
     console.log('Bookmarks table created');

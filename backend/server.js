@@ -38,6 +38,113 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// fetch url metadata
+const fetchMetadata = async (url) => {
+    try {
+        const res = await axios.get(url, {
+            timeout: 10000, // Increased timeout
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+
+        const $ = cheerio.load(res.data);
+
+        // Enhanced description extraction with multiple fallbacks
+        let description =
+            $('meta[property="og:description"]').attr('content') ||
+            $('meta[name="description"]').attr('content') ||
+            $('meta[name="twitter:description"]').attr('content') ||
+            $('meta[itemprop="description"]').attr('content') ||
+            '';
+
+        // If no meta description found, try to extract from content
+        if (!description) {
+            // Try to get first paragraph text
+            const firstParagraph = $('p').first().text().trim();
+            if (firstParagraph && firstParagraph.length > 20) {
+                description = firstParagraph.substring(0, 300);
+            } else {
+                // Try to get text from main content areas
+                const contentSelectors = [
+                    '.description', '.summary', '.intro', '.lead',
+                    'h1 + p', 'h2 + p', '.content p:first-of-type',
+                    'main p:first-of-type', 'article p:first-of-type'
+                ];
+
+                for (const selector of contentSelectors) {
+                    const text = $(selector).first().text().trim();
+                    if (text && text.length > 20) {
+                        description = text.substring(0, 300);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Clean up description
+        if (description) {
+            description = description
+                .replace(/\s+/g, ' ')
+                .replace(/\n/g, ' ')
+                .trim()
+                .substring(0, 500);
+        }
+
+        const metadata = {
+            title: $('meta[property="og:title"]').attr('content') ||
+                $('meta[name="twitter:title"]').attr('content') ||
+                $('title').text() ||
+                'Untitled',
+            description: description,
+            favicon: $('link[rel="icon"]').attr('href') ||
+                $('link[rel="shortcut icon"]').attr('href') ||
+                $('link[rel="apple-touch-icon"]').attr('href') ||
+                '/favicon.ico'
+        };
+
+        // Clean up title
+        if (metadata.title) {
+            metadata.title = metadata.title
+                .split('·')[0]
+                .split('|')[0]
+                .split('-')[0]
+                .substring(0, 200)
+                .trim();
+        }
+
+        if (metadata.favicon && !metadata.favicon.startsWith('http')) {
+            const baseUrl = new URL(url).origin;
+            metadata.favicon = new URL(metadata.favicon, baseUrl).toString();
+        }
+
+        console.log('Enhanced metadata fetched:', {
+            url: url,
+            title: metadata.title,
+            descriptionLength: metadata.description?.length || 0,
+            favicon: metadata.favicon
+        });
+
+        return {
+            title: metadata.title,
+            finalDescription: metadata.description,
+            og_image: null,
+            favicon: metadata.favicon,
+            site_name: null
+        };
+
+    } catch (error) {
+        console.error('Error fetching metadata for URL:', url, error.message);
+        return {
+            title: null,
+            finalDescription: '',
+            og_image: null,
+            favicon: null,
+            site_name: null
+        };
+    }
+};
+
 // signup api
 app.post('/api/auth/signup', async (req, res) => {
     try {
@@ -157,7 +264,10 @@ app.post('/api/bookmarks', authenticateToken, async (req, res) => {
         const { url, title, description, tags } = req.body;
 
         const user_id = req.user.userId;
-        console.log('Saving the bookmark:', { url, title, user_id });
+        console.log('Creating the bookmark:', { url, title, user_id });
+
+        // Fetch metadata for rich display (images, favicon, etc.)
+        const metadata = await fetchMetadata(url);
 
         let finalTitle = title;
         if (!title) {
@@ -177,10 +287,31 @@ app.post('/api/bookmarks', authenticateToken, async (req, res) => {
                 finalTitle = 'Untitled';
             }
         }
+
+        const finalDescription = description || metadata.description;
+
         const result = await pool.query(
-            'INSERT INTO bookmarks (user_id, url, title, description, tags) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [user_id, url, finalTitle || '', description || '', tags || '']
+            `INSERT INTO bookmarks (
+                user_id, url, title, description, tags, 
+                og_image, favicon, site_name, metadata_fetched_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *`,
+            [
+                user_id,
+                url,
+                finalTitle,
+                finalDescription,
+                tags || '',
+                null,
+                metadata.favicon,
+                null
+            ]
         );
+
+        console.log('Bookmark created with metadata:', {
+            id: result.rows[0].id,
+            title: finalTitle,
+            favicon: !!metadata.favicon
+        });
 
         res.json({
             success: true,
@@ -191,7 +322,7 @@ app.post('/api/bookmarks', authenticateToken, async (req, res) => {
         console.error('Error saving bookmark:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to save bookmark!'
+            message: 'Failed to save bookmark: ' + error.message
         });
     }
 });
@@ -245,7 +376,7 @@ app.get('/api/bookmarks/tags', authenticateToken, async (req, res) => {
         );
 
         const tagCounts = {};
-        
+
         result.rows.forEach(row => {
             if (row.tags) {
                 const tags = row.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
@@ -332,10 +463,70 @@ app.put('/api/bookmarks/:id', authenticateToken, async (req, res) => {
             });
         }
 
+        const currentBookmark = checkResult.rows[0];
+        let finalTitle = title;
+        let finalDescription = description;
+        let metadata = {
+            og_image: null,
+            favicon: currentBookmark.favicon,
+            site_name: null,
+            finalDescription: currentBookmark.description,
+            title: currentBookmark.title
+        };
+
+        // If URL has changed, fetch new metadata (including title)
+        if (url !== currentBookmark.url) {
+            console.log('URL changed, fetching new metadata for:', url);
+
+            // Fetch metadata for the new URL
+            metadata = await fetchMetadata(url);
+
+            // When URL changes, always use the fetched title (like we do with description)
+            // Only fall back to provided title if metadata fetch failed to get a title
+            finalTitle = metadata.title || title || 'Untitled';
+            finalDescription = description || metadata.finalDescription || '';
+
+            console.log('URL changed - using fetched title:', finalTitle);
+        } else {
+            // URL hasn't changed, use provided title or keep existing
+            finalTitle = title || currentBookmark.title;
+            finalDescription = description !== undefined ? description : currentBookmark.description;
+        }
+
+        // Update with metadata fields
         const result = await pool.query(
-            'UPDATE bookmarks SET url = $1, title = $2, description = $3, tags = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND user_id = $6 RETURNING *',
-            [url, title || '', description || '', tags || '', bookmarkId, user_id]
+            `UPDATE bookmarks SET 
+                url = $1, 
+                title = $2, 
+                description = $3, 
+                tags = $4, 
+                og_image = $5,
+                favicon = $6,
+                site_name = $7,
+                metadata_fetched_at = CASE WHEN $1 != $9 THEN CURRENT_TIMESTAMP ELSE metadata_fetched_at END,
+                updated_at = CURRENT_TIMESTAMP 
+            WHERE id = $8 AND user_id = $10 
+            RETURNING *`,
+            [
+                url,
+                finalTitle || '',
+                metadata.finalDescription || description || '',
+                tags || '',
+                null,
+                metadata.favicon,
+                null,
+                bookmarkId,
+                currentBookmark.url,
+                user_id
+            ]
         );
+
+        console.log('Bookmark updated with metadata:', {
+            url,
+            title: finalTitle,
+            favicon: metadata.favicon,
+            description: metadata.finalDescription
+        });
 
         res.json({
             success: true,

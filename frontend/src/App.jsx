@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { DataGrid } from '@mui/x-data-grid';
-import { Box, Button, Chip, Stack, Container, Paper, TextField, Typography, AppBar, Toolbar, IconButton, Alert, Tooltip } from '@mui/material';
-import { Search, Add, Logout, Bookmark } from '@mui/icons-material';
+import { Box, Button, Chip, Stack, Container, Paper, TextField, Typography, AppBar, Toolbar, IconButton, Alert, Tooltip, Avatar } from '@mui/material';
+import { Search, Add, Logout, Bookmark, Language, Image } from '@mui/icons-material';
 import './App.css'
 
 function App() {
@@ -320,6 +320,16 @@ function App() {
       }
     };
 
+    const getPlaceholder = () => {
+      switch (field) {
+        case 'url': return 'Enter URL';
+        case 'title': return 'Enter Title';
+        case 'description': return 'Enter Description';
+        case 'tags': return 'Enter Tags';
+        default: return `Enter ${field}`;
+      }
+    };
+
     return (
       <input
         ref={inputRef}
@@ -340,40 +350,204 @@ function App() {
     );
   };
 
+  const getMetadataQuality = (bookmark) => {
+    let score = 0;
+    let maxScore = 3;
+    let details = [];
+
+    // Check each metadata component
+    if (bookmark.title && bookmark.title.trim() !== '' && bookmark.title !== 'Untitled') {
+      score += 1;
+      details.push('✅ Title');
+    } else {
+      details.push('❌ Title');
+    }
+
+    if (bookmark.description && bookmark.description.trim() !== '') {
+      score += 1;
+      details.push('✅ Description');
+    } else {
+      details.push('❌ Description');
+    }
+
+    if (bookmark.favicon && bookmark.favicon.trim() !== '') {
+      score += 1;
+      details.push('✅ Favicon');
+    } else {
+      details.push('❌ Favicon');
+    }
+
+    const percentage = (score / maxScore) * 100;
+
+    // Determine quality level
+    let level = 'poor';
+    let color = 'error';
+    let bgColor = '#fee2e2';
+    let textColor = '#dc2626';
+
+    if (score === 3) {
+      level = 'excellent';
+      color = 'success';
+      bgColor = '#dcfce7';
+      textColor = '#16a34a';
+    } else if (score === 2) {
+      level = 'good';
+      color = 'success';
+      bgColor = '#dbeafe';
+      textColor = '#2563eb';
+    } else if (score === 1) {
+      level = 'fair';
+      color = 'warning';
+      bgColor = '#fef3c7';
+      textColor = '#d97706';
+    }
+
+    return { score, maxScore, percentage, level, color, bgColor, textColor, details };
+  };
+
+  const MetadataQualityIndicator = ({ bookmark }) => {
+    const quality = getMetadataQuality(bookmark);
+
+    return (
+      <Box
+        sx={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        <Tooltip
+          title={
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                Metadata Quality: {quality.level.toUpperCase()}
+              </Typography>
+              {quality.details.map((detail, index) => (
+                <Typography key={index} variant="caption" sx={{ display: 'block', fontSize: '11px' }}>
+                  {detail}
+                </Typography>
+              ))}
+            </Box>
+          }
+          arrow
+        >
+          <Chip
+            label={`${quality.score}/3`}
+            size="small"
+            sx={{
+              backgroundColor: quality.bgColor,
+              color: quality.textColor,
+              fontWeight: 600,
+              fontSize: '12px',
+              cursor: 'help',
+              '&:hover': {
+                opacity: 0.8
+              }
+            }}
+          />
+        </Tooltip>
+      </Box>
+    );
+  };
+
   const columns = [
     {
       field: 'title',
-      headerName: 'Title',
-      width: 300,
-      minWidth: 200,
-      flex: 1,
+      headerName: 'Bookmark',
+      width: 400,
+      minWidth: 300,
+      flex: 2,
       editable: true,
       renderCell: (params) => {
         if (!params.value && !params.row.url) return 'No Title';
         return (
-          <Box sx={{ width: '100%' }}>
-            <Box sx={{ marginBottom: '4px' }}>
-              <a
-                href={params.row.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  color: '#0066cc',
-                  textDecoration: 'none',
-                  fontSize: '14px',
-                  display: 'block',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}
-                onMouseOver={(e) => e.target.style.textDecoration = 'underline'}
-                onMouseOut={(e) => e.target.style.textDecoration = 'none'}
-                title={params.value || 'No Title'} // Tooltip for full title
-              >
-                {params.value || 'No Title'}
-              </a>
+          <Box sx={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            py: 2
+          }}>
+            {/* Website Favicon/Image */}
+            <Box sx={{ flexShrink: 0 }}>
+              {params.row.favicon ? (
+                <Avatar
+                  src={params.row.favicon}
+                  variant="rounded"
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    border: '1px solid #e2e8f0'
+                  }}
+                >
+                  <Language fontSize="small" />
+                </Avatar>
+              ) : (
+                <Avatar
+                  variant="rounded"
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    bgcolor: '#f1f5f9',
+                    color: '#64748b'
+                  }}
+                >
+                  <Language fontSize="small" />
+                </Avatar>
+              )}
             </Box>
-            {renderTags(params.row.tags)}
+
+            {/* Content */}
+            <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {/* Title */}
+              <Box sx={{ mb: 1 }}>
+                <Typography
+                  sx={{
+                    color: '#1e293b',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    display: 'block',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    cursor: 'text',
+                    lineHeight: 1.3
+                  }}
+                  title={params.value || 'No Title'}
+                >
+                  {params.value || 'No Title'}
+                </Typography>
+              </Box>
+
+              {/* Site name and Tags */}
+              {/* <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                flexWrap: 'wrap'
+              }}>
+                {params.row.site_name && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: '#94a3b8',
+                      fontSize: '11px',
+                      backgroundColor: '#f8fafc',
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: 1.5,
+                      border: '1px solid #e2e8f0',
+                      fontWeight: 500
+                    }}
+                  >
+                    {params.row.site_name}
+                  </Typography>
+                )}
+                {renderTags(params.row.tags)}
+              </Box> */}
+            </Box>
           </Box>
         );
       },
@@ -387,12 +561,13 @@ function App() {
       flex: 1,
       editable: true,
       renderCell: (params) => (
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             width: '100%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            overflow: 'hidden'
           }}
           title={params.value} // Tooltip for full URL
         >
@@ -403,13 +578,52 @@ function App() {
             style={{
               color: '#64748b',
               textDecoration: 'none',
-              fontSize: '13px'
+              fontSize: '13px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              width: '100%'
             }}
             onMouseOver={(e) => e.target.style.textDecoration = 'underline'}
             onMouseOut={(e) => e.target.style.textDecoration = 'none'}
           >
             {params.value}
           </a>
+        </Box>
+      ),
+      renderEditCell: (params) => <EditCell {...params} />
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      width: 300,
+      minWidth: 200,
+      flex: 1,
+      editable: true,
+      renderCell: (params) => (
+        <Box
+          sx={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            overflow: 'hidden'
+          }}
+          title={params.value || 'No description available'}
+        >
+          <Typography
+            variant="body2"
+            sx={{
+              color: params.value ? '#64748b' : '#ff5722',
+              fontSize: '13px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              width: '100%'
+            }}
+          >
+            {params.value || 'NO DESCRIPTION'}
+          </Typography>
         </Box>
       ),
       renderEditCell: (params) => <EditCell {...params} />
@@ -422,12 +636,15 @@ function App() {
       flex: 1,
       editable: true,
       renderCell: (params) => (
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
             overflow: 'hidden'
           }}
-          title={params.value} // Tooltip for full tags
+          title={params.value}
         >
           {renderTags(params.value)}
         </Box>
@@ -448,15 +665,93 @@ function App() {
         const dateValue = params.row.updated_at || params.row.created_at;
 
         if (!dateValue) {
-          return 'No Date';
+          return (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#94a3b8',
+                  fontSize: '13px'
+                }}
+              >
+                No Date
+              </Typography>
+            </Box>
+          );
         }
 
         try {
-          return new Date(dateValue).toLocaleString();
+          const formattedDate = new Date(dateValue).toLocaleString();
+          return (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#64748b',
+                  fontSize: '13px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+                title={formattedDate}
+              >
+                {formattedDate}
+              </Typography>
+            </Box>
+          );
         } catch (error) {
           console.error('Date formatting error:', error);
-          return 'Invalid Date';
+          return (
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#ef4444',
+                  fontSize: '13px'
+                }}
+              >
+                Invalid Date
+              </Typography>
+            </Box>
+          );
         }
+      }
+    },
+    {
+      field: 'metadata_quality',
+      headerName: 'Quality',
+      width: 100,
+      minWidth: 80,
+      sortable: true,
+      filterable: false,
+      resizable: false,
+      renderCell: (params) => <MetadataQualityIndicator bookmark={params.row} />,
+      // Custom sort function to sort by quality score
+      sortComparator: (v1, v2, cellParams1, cellParams2) => {
+        const quality1 = getMetadataQuality(cellParams1.row);
+        const quality2 = getMetadataQuality(cellParams2.row);
+        return quality1.score - quality2.score;
       }
     },
     {
@@ -488,6 +783,7 @@ function App() {
     const hasChanges = (
       newRow.url !== oldRow.url ||
       newRow.title !== oldRow.title ||
+      newRow.description !== oldRow.description ||
       newRow.tags !== oldRow.tags
     );
 
@@ -507,17 +803,25 @@ function App() {
         body: JSON.stringify({
           url: newRow.url,
           title: newRow.title,
+          description: newRow.description,
           tags: newRow.tags
         })
       });
 
       const data = await res.json();
       if (data.success) {
-        fetchBookmarks(searchTerm, selectedTag);
-        fetchAllTags();
-        setPopup({ type: 'success', message: 'Bookmark updated successfully!' });
+        const urlChanged = newRow.url !== oldRow.url;
+        const message = urlChanged
+          ? 'Bookmark updated with fresh metadata!'
+          : 'Bookmark updated successfully!';
+
+        setPopup({ type: 'success', message });
         setTimeout(() => setPopup(null), 3000);
-        return newRow;
+
+        await fetchBookmarks(searchTerm, selectedTag);
+        fetchAllTags();
+
+        return data.bookmark;
       } else {
         setPopup({ type: 'error', message: 'Failed to update bookmark: ' + data.message });
         setTimeout(() => setPopup(null), 3000);
@@ -559,39 +863,39 @@ function App() {
 
   if (isLoggedIn) {
     return (
-      <Box sx={{ 
-        backgroundColor: '#f8fafc', 
+      <Box sx={{
+        backgroundColor: '#f8fafc',
         minHeight: '100vh',
         width: '100vw',
         margin: 0,
         padding: 0
       }}>
         {/* Header */}
-        <AppBar position="static" sx={{ 
-          backgroundColor: 'white', 
+        <AppBar position="static" sx={{
+          backgroundColor: 'white',
           color: '#1e293b',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
           borderBottom: '1px solid #e2e8f0'
         }}>
           <Toolbar>
             <Bookmark sx={{ mr: 2, color: '#3b82f6' }} />
-            <Typography variant="h6" component="div" sx={{ 
-              flexGrow: 1, 
+            <Typography variant="h6" component="div" sx={{
+              flexGrow: 1,
               fontWeight: 600,
               color: '#1e293b'
             }}>
               LinkVault
             </Typography>
-            <Typography variant="body2" sx={{ 
-              mr: 2, 
+            <Typography variant="body2" sx={{
+              mr: 2,
               color: '#64748b',
               display: { xs: 'none', sm: 'block' }
             }}>
               Welcome, {user.name}
             </Typography>
-            <IconButton 
+            <IconButton
               onClick={handleLogout}
-              sx={{ 
+              sx={{
                 color: '#64748b',
                 '&:hover': { backgroundColor: '#f1f5f9' }
               }}
@@ -601,15 +905,15 @@ function App() {
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ 
-          px: { xs: 2, sm: 4, md: 6 }, 
-          py: 4, 
+        <Box sx={{
+          px: { xs: 2, sm: 4, md: 6 },
+          py: 4,
           width: '100%',
           maxWidth: 'none'
         }}>
           {/* Notifications */}
           {popup && (
-            <Alert 
+            <Alert
               severity={popup.type}
               sx={{
                 position: 'fixed',
@@ -763,7 +1067,7 @@ function App() {
             <Typography variant="h5" sx={{ mb: 3, fontWeight: 600, color: '#1e293b' }}>
               Search & Filter
             </Typography>
-            
+
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <TextField
                 fullWidth
@@ -782,10 +1086,10 @@ function App() {
                 }}
               />
               {(searchTerm || selectedTag) && (
-                <Button 
+                <Button
                   onClick={clearSearch}
                   variant="outlined"
-                  sx={{ 
+                  sx={{
                     whiteSpace: 'nowrap',
                     borderColor: '#d1d5db',
                     color: '#6b7280',
@@ -802,11 +1106,11 @@ function App() {
                 <Typography variant="body2" component="span" sx={{ mr: 1, color: '#64748b' }}>
                   Filtered by tag:
                 </Typography>
-                <Chip 
-                  label={selectedTag} 
+                <Chip
+                  label={selectedTag}
                   size="small"
-                  sx={{ 
-                    backgroundColor: '#dbeafe', 
+                  sx={{
+                    backgroundColor: '#dbeafe',
                     color: '#1d4ed8',
                     fontWeight: 500
                   }}
@@ -831,8 +1135,8 @@ function App() {
                         color: selectedTag === tag ? 'white' : '#3b82f6',
                         borderColor: '#3b82f6',
                         fontWeight: 500,
-                        '&:hover': { 
-                          backgroundColor: selectedTag === tag ? '#2563eb' : '#eff6ff' 
+                        '&:hover': {
+                          backgroundColor: selectedTag === tag ? '#2563eb' : '#eff6ff'
                         }
                       }}
                     />
@@ -845,9 +1149,81 @@ function App() {
           {/* Bookmarks List Section */}
           <Paper elevation={0} sx={{ border: '1px solid #e2e8f0' }}>
             <Box sx={{ p: 3, pb: 2 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                Your Bookmarks ({bookmarks.length})
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                  Your Bookmarks ({bookmarks.length})
+                </Typography>
+                {bookmarks.length > 0 && (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ color: '#64748b', mr: 1 }}>
+                      Quality:
+                    </Typography>
+                    {(() => {
+                      const qualityStats = bookmarks.reduce((acc, bookmark) => {
+                        const quality = getMetadataQuality(bookmark);
+                        if (quality.score === 3) acc.excellent++;
+                        else if (quality.score === 2) acc.good++;
+                        else if (quality.score === 1) acc.fair++;
+                        else acc.poor++;
+                        return acc;
+                      }, { excellent: 0, good: 0, fair: 0, poor: 0 });
+
+                      return (
+                        <Stack direction="row" spacing={0.5}>
+                          {qualityStats.excellent > 0 && (
+                            <Chip
+                              label={`${qualityStats.excellent} Excellent`}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#dcfce7',
+                                color: '#16a34a',
+                                fontSize: '11px',
+                                height: '24px'
+                              }}
+                            />
+                          )}
+                          {qualityStats.good > 0 && (
+                            <Chip
+                              label={`${qualityStats.good} Good`}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#dbeafe',
+                                color: '#2563eb',
+                                fontSize: '11px',
+                                height: '24px'
+                              }}
+                            />
+                          )}
+                          {qualityStats.fair > 0 && (
+                            <Chip
+                              label={`${qualityStats.fair} Fair`}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#fef3c7',
+                                color: '#d97706',
+                                fontSize: '11px',
+                                height: '24px'
+                              }}
+                            />
+                          )}
+                          {qualityStats.poor > 0 && (
+                            <Chip
+                              label={`${qualityStats.poor} Poor`}
+                              size="small"
+                              sx={{
+                                backgroundColor: '#fee2e2',
+                                color: '#dc2626',
+                                fontSize: '11px',
+                                height: '24px'
+                              }}
+                            />
+                          )}
+                        </Stack>
+                      );
+                    })()}
+                  </Box>
+                )}
+              </Box>
             </Box>
             {bookmarks.length === 0 ? (
               <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -858,50 +1234,64 @@ function App() {
             ) : (
               <Box sx={{ height: 500, width: '100%', overflow: 'auto' }}>
                 <DataGrid
-                rows={bookmarks}
-                columns={columns}
-                initialState={{
-                  pagination: {
-                    paginationModel: { page: 0, pageSize: 5 }
-                  }
-                }}
-                pageSizeOptions={[5, 10, 25]}
-                disableRowSelectionOnClick
-                experimentalFeatures={{ newEditingApi: true }}
-                processRowUpdate={processRowUpdate}
-                onProcessRowUpdateError={(error) => {
-                  console.error('Error updating row:', error);
-                }}
-                columnResizeMode="onChange"
-                sx={{
-                  '& .MuiDataGrid-cell': {
-                    padding: '8px 16px',
-                    alignItems: 'flex-start',
-                    borderBottom: 'none !important',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  },
-                  '& .MuiDataGrid-row': {
-                    minHeight: '80px !important',
-                    borderBottom: '1px solid #f0f0f0'
-                  },
-                  '& .MuiDataGrid-columnSeparator': {
-                    visibility: 'visible !important',
-                    color: '#e0e0e0'
-                  },
-                  '& .MuiDataGrid-columnHeaders': {
-                    borderBottom: '2px solid #e0e0e0'
-                  },
-                  '& .MuiDataGrid-columnHeader': {
-                    '&:hover .MuiDataGrid-columnSeparator': {
-                      visibility: 'visible',
-                      color: '#3b82f6'
+                  rows={bookmarks}
+                  columns={columns}
+                  initialState={{
+                    pagination: {
+                      paginationModel: { page: 0, pageSize: 5 }
                     }
-                  }
-                }}
-              />
+                  }}
+                  pageSizeOptions={[5, 10, 25]}
+                  disableRowSelectionOnClick
+                  experimentalFeatures={{ newEditingApi: true }}
+                  processRowUpdate={processRowUpdate}
+                  onProcessRowUpdateError={(error) => {
+                    console.error('Error updating row:', error);
+                  }}
+                  columnResizeMode="onChange"
+                  sx={{
+                    '& .MuiDataGrid-cell': {
+                      padding: '0 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      borderBottom: 'none !important',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      overflow: 'visible',
+                    },
+                    '& .MuiDataGrid-row': {
+                      minHeight: '100px !important',
+                      borderBottom: '1px solid #e2e8f0',
+                      '&:hover': {
+                        backgroundColor: '#f8fafc'
+                      },
+                      '&:last-child': {
+                        borderBottom: 'none'
+                      }
+                    },
+                    '& .MuiDataGrid-columnSeparator': {
+                      visibility: 'visible !important',
+                      color: '#e2e8f0'
+                    },
+                    '& .MuiDataGrid-columnHeaders': {
+                      borderBottom: '2px solid #e2e8f0',
+                      backgroundColor: '#f8fafc',
+                      '& .MuiDataGrid-columnHeaderTitle': {
+                        fontWeight: 600,
+                        color: '#374151'
+                      }
+                    },
+                    '& .MuiDataGrid-columnHeader': {
+                      '&:hover .MuiDataGrid-columnSeparator': {
+                        visibility: 'visible',
+                        color: '#3b82f6'
+                      }
+                    },
+                    '& .MuiDataGrid-virtualScroller': {
+                      backgroundColor: '#ffffff'
+                    }
+                  }}
+                />
               </Box>
             )}
           </Paper>
@@ -911,16 +1301,16 @@ function App() {
   }
 
   return (
-    <Box sx={{ 
-      backgroundColor: '#f8fafc', 
+    <Box sx={{
+      backgroundColor: '#f8fafc',
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center'
     }}>
       <Container maxWidth="sm">
-        <Paper elevation={0} sx={{ 
-          p: 6, 
+        <Paper elevation={0} sx={{
+          p: 6,
           textAlign: 'center',
           backgroundColor: 'white',
           border: '1px solid #e2e8f0',
@@ -928,21 +1318,21 @@ function App() {
         }}>
           <Box sx={{ mb: 4 }}>
             <Bookmark sx={{ fontSize: 48, color: '#3b82f6', mb: 2 }} />
-            <Typography variant="h3" component="h1" sx={{ 
+            <Typography variant="h3" component="h1" sx={{
               fontWeight: 700,
               color: '#1e293b',
               mb: 1
             }}>
               LinkVault
             </Typography>
-            <Typography variant="body1" sx={{ 
+            <Typography variant="body1" sx={{
               color: '#64748b',
               fontSize: '1.1rem',
               mb: 1
             }}>
               Smart Bookmark Manager
             </Typography>
-            <Typography variant="body2" sx={{ 
+            <Typography variant="body2" sx={{
               color: '#64748b',
               fontSize: '0.9rem'
             }}>
@@ -958,7 +1348,7 @@ function App() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                sx={{ 
+                sx={{
                   mb: 3,
                   '& .MuiOutlinedInput-root': {
                     backgroundColor: '#f8fafc',
@@ -975,7 +1365,7 @@ function App() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              sx={{ 
+              sx={{
                 mb: 3,
                 '& .MuiOutlinedInput-root': {
                   backgroundColor: '#f8fafc',
@@ -991,7 +1381,7 @@ function App() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              sx={{ 
+              sx={{
                 mb: 4,
                 '& .MuiOutlinedInput-root': {
                   backgroundColor: '#f8fafc',
@@ -1014,8 +1404,8 @@ function App() {
                 '&:disabled': { backgroundColor: '#94a3b8' }
               }}
             >
-              {isLoading 
-                ? (isSignupMode ? 'Creating Account...' : 'Signing in...') 
+              {isLoading
+                ? (isSignupMode ? 'Creating Account...' : 'Signing in...')
                 : (isSignupMode ? 'Create Account' : 'Sign In')
               }
             </Button>
